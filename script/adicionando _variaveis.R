@@ -11,62 +11,8 @@ options(warn=aviso)
 rm(aviso)
 
 # Carregar base de dados
-pnad_data <- read.csv("pnad_unificado_filtrado.csv")
+pnad_data <- read.csv("D:\\Ajudinha\\pe-de-meia\\bases\\pnad_unificado_filtrado2.CSV")
 
-# Criar uma nova coluna indicando se a renda é menor que 1/2 salário mínimo
-pnad_data <- pnad_data %>%
-  mutate(renda_menor_meio_salario = if_else(VD5009real_ultimoano %in% c("Até ¼ salário mínimo", "Mais de ¼ até ½ salário mínimo"), 
-                                            "Sim", 
-                                            "Não"))
-
-pnad_data <- pnad_data %>%
-  mutate(
-    V2007 = case_when(
-      V2007 == "Mulher" ~ 2,  # Assumindo que o valor é "Mulher" para mulheres
-      V2007 == "Homem" ~ 1,   # Assumindo que o valor é "Homem" para homens
-      TRUE ~ as.numeric(V2007)  # Mantém outros valores, se houver
-    ),
-    VD2002 = case_when(
-      VD2002 == 1  ~ "Pessoa responsável",
-      VD2002 == 2  ~ "Cônjuge ou companheiro(a)",
-      VD2002 == 3  ~ "Filho(a)",
-      VD2002 == 4  ~ "Enteado(a)",
-      VD2002 == 5  ~ "Genro ou nora",
-      VD2002 == 6  ~ "Pai, mãe, padrasto ou madrasta",
-      VD2002 == 7  ~ "Sogro(a)",
-      VD2002 == 8  ~ "Neto(a)",
-      VD2002 == 9  ~ "Bisneto(a)",
-      VD2002 == 10 ~ "Irmão ou irmã",
-      VD2002 == 11 ~ "Avô ou avó",
-      VD2002 == 12 ~ "Outro parente",
-      VD2002 == 13 ~ "Agregado(a)",
-      VD2002 == 14 ~ "Convivente",
-      VD2002 == 15 ~ "Pensionista",
-      VD2002 == 16 ~ "Empregado(a) doméstico(a)",
-      VD2002 == 17 ~ "Parente do(a) empregado(a) doméstico(a)",
-      TRUE ~ as.character(VD2002)  # Mantém outros valores se houver
-    ),
-    VD3005 = case_when(
-      VD3005 == 0  ~ "Sem instrução e menos de 1 ano de estudo",
-      VD3005 == 1  ~ "1 ano de estudo",
-      VD3005 == 2  ~ "2 anos de estudo",
-      VD3005 == 3  ~ "3 anos de estudo",
-      VD3005 == 4  ~ "4 anos de estudo",
-      VD3005 == 5  ~ "5 anos de estudo",
-      VD3005 == 6  ~ "6 anos de estudo",
-      VD3005 == 7  ~ "7 anos de estudo",
-      VD3005 == 8  ~ "8 anos de estudo",
-      VD3005 == 9  ~ "9 anos de estudo",
-      VD3005 == 10 ~ "10 anos de estudo",
-      VD3005 == 11 ~ "11 anos de estudo",
-      VD3005 == 12 ~ "12 anos de estudo",
-      VD3005 == 13 ~ "13 anos de estudo",
-      VD3005 == 14 ~ "14 anos de estudo",
-      VD3005 == 15 ~ "15 anos de estudo",
-      VD3005 == 16 ~ "16 anos ou mais de estudo",
-      TRUE ~ "Não aplicável"  # Caso para valores que não se encaixam nos listados
-    )
-  )
 
 # Variável de Ensino Médio, interação entre essas duas, se tem Fund. Completo
 pnad_data <- pnad_data %>%
@@ -74,8 +20,8 @@ pnad_data <- pnad_data %>%
     # Ensino Médio
     em = factor(
       case_when(
-        V3002 == "Sim" & V3003A == "Regular do ensino médio" ~ "Estuda EM", 
-        V3002 == "Não" ~ "Não Estuda EM",
+        V3002 == 1 & V3003A == 6 ~ "Estuda EM", 
+        V3002 == 2 ~ "Não Estuda EM",
         TRUE ~ NA_character_
       ),
       levels = c("Estuda EM","Não Estuda EM")
@@ -83,15 +29,15 @@ pnad_data <- pnad_data %>%
     # Unipessoal
     unip = factor(
       case_when(
-        VD2004 == "Unipessoal" ~ "Unipessoal",
-        VD2004 == "Nuclear" | VD2004 == "Estendida" | VD2004 == "Composta" ~ "Não é Unipessoal",
+        VD2004 == 1 ~ "Unipessoal",
+        VD2004 == 2 | VD2004 == 3 | VD2004 == 4 ~ "Não é Unipessoal",
         TRUE ~ NA_character_
       ),
       levels = c("Unipessoal", "Não é Unipessoal")
     ),
     # Tem EF Completo?
     ef_comp = case_when(
-      VD3004 == "Fundamental completo ou equivalente" ~ 1,
+      VD3004 == 3 ~ 1,
       .default = 0
     )
   )
@@ -122,9 +68,45 @@ pnad_data <- pnad_data %>%
   select(-is_pai)
 
 # Realizando processo de incorporação do desenho amostral nos microdados
-pnad_jovens <- tibble::as_tibble(x=pnad_jovens)
-pnad_jovens <- PNADcIBGE::pnadc_design(data_pnadc=pnad_jovens)
-str(object=pnad_jovens)
+pnad_data <- tibble::as_tibble(x=pnad_data)
+pnad_data <- PNADcIBGE::pnadc_design(data_pnadc=pnad_data)
+str(object=pnad_data)
 
-totalvisita <- svytotal(x=~visita, design=pnad_jovens, na.rm=TRUE)
+# Definindo subset do público-alvo do programa Pé de Meia
+# Cria uma variável indicadora temporária no objeto de pesquisa
+pnad_data <- update(pnad_data,
+                    atende_criterios = (V2009 >= 14 & V2009 <= 24 &
+                                          em == "Estuda EM" &
+                                          V3002A == 2 &
+                                          (renda_menor_meio_salario == "Sim" | V5001A == 1 | V5002A == 1 | V5003A == 1) &
+                                          unip == "Não é Unipessoal")
+)
+
+# Filtra o objeto svydesign para manter indivíduos que atendem ao critério em pelo menos um dos períodos
+pnadc_pa <- subset(pnad_data, ave(atende_criterios, ID_PESSOA, FUN = any))
+
+
+# Definindo subset do público-alvo potencial do programa Pé de Meia
+# Adiciona a variável indicadora ao objeto de pesquisa para o subset do programa Pé de Meia
+pnad_data <- update(pnad_data,
+                    atende_criterios_papotencial = (V2009 >= 14 & V2009 <= 24 &
+                                                      (renda_menor_meio_salario == "Sim" | V5001A == 1 | V5002A == 1 | V5003A == 1) &
+                                                      (ef_comp == 1 | VD3004 == 4))
+)
+
+# Filtra o objeto svydesign para manter os indivíduos que atendem ao critério em pelo menos um dos períodos
+pnadc_papotencial <- subset(pnad_data, ave(atende_criterios_papotencial, ID_PESSOA, FUN = any))
+
+# Definindo subset de pessoas na rede pública de ensino 
+pnadc_redepublica <- subset(pnad_data, V3002A == "Rede pública") #add ser EM
+
+
+
+pnadc_redepublica <- transform(pnadc_redepublica, contagem=1)
+
+
+
+
+
+totalvisita <- svytotal(x=~visita, design=pnad_data, na.rm=TRUE)
 totalvisita
